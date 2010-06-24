@@ -1,0 +1,92 @@
+#!/usr/bin/env ruby
+
+gem 'rest-client'
+gem 'json'
+gem 'highline'
+
+require 'sha1'
+require 'restclient'
+require 'json'
+require 'uri'
+require 'highline'
+
+def check_login(username, password, url)
+  begin
+    result = RestClient::Request.execute(:method => :get, :url => url, :user => username, :password => password)
+    json_result = begin
+      # should be {"couchdb"=>"Welcome", "version"=>"0.11.0"}
+      JSON.parse(result.body)
+    rescue JSON::ParserError
+      {}
+    end
+    if json_result["couchdb"] == "Welcome" && json_result["version"] == "0.11.0"
+      puts "DBA logged in ok"
+      puts
+      true
+    else
+      puts "Connected to #{url} ok with credentials, but doesn't look like it's a CouchDB server. Check URL and try again"
+      false
+    end
+  rescue RestClient::Unauthorized
+    puts "Username/password for #{url} unauthorized. Check credentials and try again"
+    false
+  rescue SocketError, Errno::ECONNREFUSED
+    puts "Could not connect to #{url}. Check URL and try again"
+    false
+  end
+end
+
+def random_password(size = 8)
+  chars = (('a'..'z').to_a + ('0'..'9').to_a) - %w(i o 0 1 l 0)
+  (1..size).collect{|a| chars[rand(chars.size)] }.join
+end
+
+$highline = HighLine.new
+
+$dba_username = nil
+$dba_password = nil
+$couch_url = nil
+
+$dba_login_ok = false
+until($dba_logged_in) do
+  puts
+  $dba_username  = $highline.ask("DBA username")
+  $dba_password  = $highline.ask("DBA password:"){|question| question.echo = '*'}
+  $couch_url     = URI.parse($highline.ask("CouchDB URL:"))
+  $dba_logged_in = check_login($dba_username, $dba_password, $couch_url.to_s)
+end
+
+puts "  Lets add some users..."
+$add_more_users = true
+while($add_more_users)
+  puts
+  username  = $highline.ask("New username:")
+  password  = $highline.ask("New password (leave blank to generate random):")
+  if password.empty?
+    password = random_password(10)
+    puts "  Using generated password #{password}"
+  end
+
+  roles     = $highline.ask("Roles (comma separated):")
+  
+  salt = random_password(10).unpack("H*")[0] # not sure if hex encoding is required for salt, but docs seem to say it is
+  password_sha = SHA1.hexdigest(password + salt)
+
+  user = {
+    "_id"           => "org.couchdb.user:#{username}",
+    "type"          => "user",
+    "name"          => username,
+    "roles"         => roles.split(/\s*,\s*/),
+    "password_sha"  => password_sha,
+    "salt"          => salt
+  }
+  
+  put_user_url = ($couch_url + "_users/#{user["_id"]}").to_s
+  puts "  >> #{user.to_json}"
+  result = RestClient::Request.execute(:method => :put, :url => put_user_url, :user => $dba_username, :password => $dba_password, :payload => user.to_json)
+  puts "  << #{result}"
+  
+  puts "User #{username} added"
+  
+  $add_more_users = $highline.agree("Add another?")
+end
