@@ -20,22 +20,22 @@ Choice.options do
     desc 'The CouchDB server to compact databases on. Required'
   end
   
+  option :config_file do
+    short "-c"
+    long "--config=CONFIG"
+    desc "path to YAML config file containing username/password. (see couch_conf_example.yml)"
+  end  
+  
   option :username do
     short '-u'
     long '--username=USERNAME'
-    desc 'Username to connect to CouchDB to run compaction as'
+    desc 'Username to connect to CouchDB to run compaction as (ignored if config option provided)'
   end
   
   option :password do
     short '-p'
     long '--password=PASSWORD'
-    desc 'Password to connect to CouchDB to run compaction as'
-  end
-  
-  option :config_file do
-    short "-c"
-    long "--config=CONFIG"
-    desc "path to YAML config file containing username/password. (see couch_conf_example.yml)"
+    desc 'Password to connect to CouchDB to run compaction as (ignored if config option provided)'
   end
 
   separator ''
