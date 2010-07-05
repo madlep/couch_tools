@@ -7,4 +7,5 @@ Any issues, or feedback hit up [Julian Doherty](mailto:julian.doherty@lonelyplan
 
 Heres the goodies you get:
 
- * `add_couch_user` - Command line app that prompts you for a server username/password, then allows you to add other users. Basically automates what [the security page](http://wiki.apache.org/couchdb/Security_Features_Overview) describes for setting up user security.
+ * `add_couch_user` - Prompts you for a server username/password, then allows you to add other users. Basically automates what [the security page](http://wiki.apache.org/couchdb/Security_Features_Overview) describes for setting up user security.
+ * `compact_couch` - For a given server URL, runs database compaction for all databases, runs view compaction for all design docs in all databases, and runs view cleanup for all databases.
