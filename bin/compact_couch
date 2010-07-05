@@ -48,6 +48,8 @@ Choice.options do
 
 end
 
+$rc = 0
+
 $server_url = Choice.choices[:server_url]
 if Choice.choices[:config_file]
   config = YAML.load(File.read(Choice.choices[:config_file]))
@@ -75,6 +77,7 @@ $dbs.each do |db|
     $stdout.puts "compacting #{db_url}"
   else
     $stderr.puts "ERROR [#{result.code}] couldn't compact using #{db_url}/_compact. Response: #{result}"
+    $rc = 1
   end
   
   # clean up views
@@ -84,6 +87,7 @@ $dbs.each do |db|
     $stdout.puts "cleaning up views in #{db_url}"
   else
     $stderr.puts "ERROR [#{result.code}] couldn't clean up views #{cleanup_req[:url]}. Response: #{result}"
+    $rc = 1    
   end
 
   # compact views
@@ -102,8 +106,9 @@ $dbs.each do |db|
         $stdout.puts "compacting #{db_url}/#{design_name}"
       else
         $stderr.puts "ERROR [#{result.code}] couldn't compact using #{db_url}/_compact/#{design_name}. Response: #{result}"
+        $rc = 1        
       end
     end
   end
-
 end
+exit($rc)
