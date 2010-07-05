@@ -1,0 +1,109 @@
+#!/usr/bin/env ruby
+
+gem 'rest-client'
+gem 'json'
+gem 'choice'
+
+require 'restclient'
+require 'json'
+require 'choice'
+require 'cgi'
+require 'yaml'
+
+Choice.options do
+  header ''
+  header 'Specific options:'
+
+  option :server_url, :required => true do
+    short '-s'
+    long '--server=URL'
+    desc 'The CouchDB server to compact databases on. Required'
+  end
+  
+  option :username do
+    short '-u'
+    long '--username=USERNAME'
+    desc 'Username to connect to CouchDB to run compaction as'
+  end
+  
+  option :password do
+    short '-p'
+    long '--password=PASSWORD'
+    desc 'Password to connect to CouchDB to run compaction as'
+  end
+  
+  option :config_file do
+    short "-c"
+    long "--config=CONFIG"
+    desc "path to YAML config file containing username/password. (see couch_conf_example.yml)"
+  end
+
+  separator ''
+  separator 'Common options: '
+
+  option :help do
+    long '--help'
+    desc 'Show this message'
+  end
+
+end
+
+$server_url = Choice.choices[:server_url]
+if Choice.choices[:config_file]
+  config = YAML.load(File.read(Choice.choices[:config_file]))
+  $username = config["username"]
+  $password = config["password"]
+else
+  $username   = Choice.choices[:username]
+  $password   = Choice.choices[:password]
+end
+
+# get the list of DBs
+$dbs = JSON.parse(RestClient.get("#{$server_url}/_all_dbs"))
+
+$dbs.each do |db|
+  db_url = "#{$server_url}/#{db}"
+  
+  basic_req = {}
+  basic_req[:user] = $username if $username
+  basic_req[:password] = $password if $password
+  
+  #compact db
+  compact_req = basic_req.dup.merge(:url => "#{db_url}/_compact", :method => :post)
+  result = RestClient::Request.execute(compact_req)  
+  if result.code == 202 && JSON.parse(result) == {"ok" => true}
+    $stdout.puts "compacting #{db_url}"
+  else
+    $stderr.puts "ERROR [#{result.code}] couldn't compact using #{db_url}/_compact. Response: #{result}"
+  end
+  
+  # clean up views
+  cleanup_req = basic_req.dup.merge(:url => "#{db_url}/_view_cleanup", :method => :post)
+  result = RestClient::Request.execute(cleanup_req)  
+  if result.code == 202 && JSON.parse(result) == {"ok" => true}
+    $stdout.puts "cleaning up views in #{db_url}"
+  else
+    $stderr.puts "ERROR [#{result.code}] couldn't clean up views #{cleanup_req[:url]}. Response: #{result}"
+  end
+
+  # compact views
+  design_start = CGI.escape('"_design/"')
+  design_end   = CGI.escape('"_design0"')
+  
+  design_req = basic_req.dup.merge(:url => "#{db_url}/_all_docs?startkey=#{design_start}&endkey=#{design_end}&include_docs=true", :method => :get)
+  design_result = RestClient::Request.execute(design_req)
+  if design_result.code == 200
+    rows = JSON.parse(design_result)["rows"]
+    rows.each do |design_doc_row|
+      design_name = design_doc_row["id"].match(/_design\/(\w+)/)[1]
+      view_compact_req = basic_req.dup.merge(:url => "#{db_url}/_compact/#{design_name}", :method => :post)
+      result = RestClient::Request.execute(view_compact_req)      
+      if result.code == 202 && JSON.parse(result) == {"ok" => true}
+        $stdout.puts "compacting #{db_url}/#{design_name}"
+      else
+        $stderr.puts "ERROR [#{result.code}] couldn't compact using #{db_url}/_compact/#{design_name}. Response: #{result}"
+      end
+    end
+  end
+
+end
