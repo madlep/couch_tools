@@ -44,6 +44,10 @@ module Common
     Choice.choices[:server_url]
   end
   
+  def db_url(db)
+    "#{server_url}/#{db}"
+  end
+  
   def username
     if Choice.choices[:config_file]
       config["username"]
