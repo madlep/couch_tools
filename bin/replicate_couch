@@ -1,0 +1,42 @@
+#!/usr/bin/env ruby
+
+$:.unshift(File.dirname(__FILE__) + "/../lib")
+
+require 'common'
+require 'choice'
+require 'json'
+
+include Common
+
+Choice.options do
+  common_options
+  
+  separator ''
+  separator 'replicate_couch options'
+  
+  option :databases, :required => true do
+    short '-d'
+    long '--dbs=*DATABASES'
+    desc 'Databases to replicate'
+  end
+  
+  option :source_server_url, :required => true do
+    short '-t'
+    long '--target=TARGET'
+    desc 'source server URL to pull data from for replication (assuming same replication username/password)'
+  end
+
+end
+
+def source_server_url
+  Choice.choices[:source_server_url].gsub(/:\/\//, "://#{username}:#{password}@")
+end
+
+Choice.choices[:databases].each do |db|
+  $stdout.puts "Starting pull replication from #{source_server_url}/#{db} to #{server_url}/#{db}"
+  couch_request("#{server_url}/_replicate", :post, {
+    "source" => "#{source_server_url}/#{db}",
+    "target" => "#{db}",
+    "continuous" => true
+  }.to_json)
+end
