@@ -1,0 +1,57 @@
+#!/usr/bin/env ruby
+
+$:.unshift(File.dirname(__FILE__) + "/../lib")
+
+require 'common'
+require 'json'
+require 'choice'
+require 'cgi'
+
+include Common
+
+Choice.options do
+  common_options
+end
+
+$rc = 0
+
+# get the list of DBs
+$dbs = JSON.parse(couch_request("#{server_url}/_all_dbs"))
+
+$dbs.each do |db|
+  #compact db
+  compact_result = couch_request("#{db_url(db)}/_compact", :post)
+  if compact_result.code == 202 && JSON.parse(compact_result) == {"ok" => true}
+    $stdout.puts "compacting #{db_url(db)}"
+  else
+    $stderr.puts "ERROR [#{compact_result.code}] couldn't compact using #{db_url(db)}/_compact. Response: #{compact_result}"
+    $rc = 1
+  end
+  
+  # clean up views
+  cleanup_result = couch_request("#{db_url(db)}/_view_cleanup", :post)
+  if cleanup_result.code == 202 && JSON.parse(cleanup_result) == {"ok" => true}
+    $stdout.puts "cleaning up views in #{db_url(db)}"
+  else
+    $stderr.puts "ERROR [#{compact_result.code}] couldn't clean up views #{db_url(db)}/_view_cleanup. Response: #{compact_result}"
+    $rc = 1    
+  end
+
+  # compact views
+  design_start = CGI.escape('"_design/"')
+  design_end   = CGI.escape('"_design0"')
+  
+  design_result = couch_request("#{db_url(db)}/_all_docs?startkey=#{design_start}&endkey=#{design_end}&include_docs=true")
+  rows = JSON.parse(design_result)["rows"]
+  rows.each do |design_doc_row|
+    design_name = design_doc_row["id"].match(/_design\/(\w+)/)[1]
+    view_compact_result = couch_request("#{db_url(db)}/_compact/#{design_name}", :post)
+    if view_compact_result.code == 202 && JSON.parse(view_compact_result) == {"ok" => true}
+      $stdout.puts "compacting #{db_url(db)}/#{design_name}"
+    else
+      $stderr.puts "ERROR [#{view_compact_result.code}] couldn't compact using #{db_url(db)}/_compact/#{design_name}. Response: #{view_compact_result}"
+      $rc = 1        
+    end
+  end
+end
+exit($rc)
