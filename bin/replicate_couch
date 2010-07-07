@@ -25,6 +25,18 @@ Choice.options do
     long '--target=TARGET'
     desc 'target server URL to push data to for replication (assuming same replication username/password)'
   end
+  
+  option :cancel do
+    long '--cancel'
+    desc 'stop a running replication job'
+  end
+  
+  option :continuous do
+    long '--continuous=y'
+    default 'y'
+    valid %w{y n}
+    desc 'run replication as a one off (n) or continuously until cancelled (y - default)'
+  end
 
 end
 
@@ -32,14 +44,25 @@ def source_server_url
   Choice.choices[:source_server_url].gsub(/:\/\//, "://#{username}:#{password}@")
 end
 
+def cancel?
+  Choice.choices[:cancel]
+end
+
+def continuous?
+  Choice.choices[:continuous] == 'y'
+end
+
 Choice.choices[:databases].each do |db|
   # this was initially using pull replication, but it was getting weird 401 forbidden responses which halted the replication
   # these seemed to happen after the puller followed a redirect, but didn't send authorization headers, and the target blocked it
   # push seems to work ok
-  $stdout.puts "Starting push replication from #{server_url}/#{db} to #{source_server_url}/#{db}"
-  couch_request("#{server_url}/_replicate", :post, {
+  $stdout.puts "#{cancel? ? "Cancelling " : "Starting "}#{continuous? ? "continuous " : ""}push replication from #{server_url}/#{db} to #{source_server_url}/#{db}"
+  payload = {
     "source" => "#{db}",
-    "target" => "#{source_server_url}/#{db}",
-    "continuous" => true
-  }.to_json)
+    "target" => "#{source_server_url}/#{db}"
+  }
+  payload["continuous"] = true if continuous?
+  payload["cancel"] = true if cancel?
+  
+  couch_request("#{server_url}/_replicate", :post, payload.to_json)
 end
