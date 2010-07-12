@@ -21,9 +21,9 @@ Choice.options do
   end
   
   option :source_server_url, :required => true do
-    short '-t'
-    long '--target=TARGET'
-    desc 'target server URL to push data to for replication (assuming same replication username/password)'
+    short '-o'
+    long '--source=SOURCE'
+    desc 'source server URL to pull data from for replication (assuming same replication username/password)'
   end
   
   option :cancel do
@@ -53,16 +53,15 @@ def continuous?
 end
 
 Choice.choices[:databases].each do |db|
-  # this was initially using pull replication, but it was getting weird 401 forbidden responses which halted the replication
-  # these seemed to happen after the puller followed a redirect, but didn't send authorization headers, and the target blocked it
-  # push seems to work ok
-  $stdout.puts "#{cancel? ? "Cancelling " : "Starting "}#{continuous? ? "continuous " : ""}push replication from #{server_url}/#{db} to #{source_server_url}/#{db}"
+  $stdout.puts "#{cancel? ? "Cancelling " : "Starting "}#{continuous? ? "continuous " : ""}pull replication from #{source_server_url}/#{db} to #{server_url}/#{db}"
   payload = {
-    "source" => "#{db}",
-    "target" => "#{source_server_url}/#{db}"
+    "source" => "#{source_server_url}/#{db}",
+    "target" => "#{db}"
   }
   payload["continuous"] = true if continuous?
   payload["cancel"] = true if cancel?
   
-  couch_request("#{server_url}/_replicate", :post, payload.to_json)
+  puts "#{server_url}/_replicate >> #{payload.to_json}"
+  response = couch_request("#{server_url}/_replicate", :post, payload.to_json)
+  puts "#{server_url}/_replicate << #{response}"
 end
